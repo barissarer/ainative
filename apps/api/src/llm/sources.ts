@@ -7,7 +7,22 @@ export interface Source {
   snippets: string[];
 }
 
-/** Collect URLs the model actually retrieved or cited. Only these can back a "Fact". */
+/** Add retrieved pages to a source list (deduplicated by URL, ids S1, S2…). Only these can back a "Fact". */
+export function addSources(existing: Source[], items: { url: string; title?: string | null; snippet?: string | null }[]): Source[] {
+  const byUrl = new Map(existing.map((s) => [s.url, s]));
+  for (const { url, title, snippet } of items) {
+    if (!url) continue;
+    let s = byUrl.get(url);
+    if (!s) {
+      s = { id: `S${byUrl.size + 1}`, url, title: title || url, snippets: [] };
+      byUrl.set(url, s);
+    }
+    if (snippet && !s.snippets.includes(snippet)) s.snippets.push(snippet.slice(0, 400));
+  }
+  return [...byUrl.values()];
+}
+
+/** Collect URLs the model actually retrieved or cited. */
 export function extractSources(blocks: Anthropic.ContentBlock[], existing: Source[] = []): Source[] {
   const byUrl = new Map(existing.map((s) => [s.url, s]));
   const add = (url: string, title: string | null | undefined, snippet?: string | null) => {

@@ -5,7 +5,7 @@ Module 1: **Client Qualification**. Chat-first scoring of whether a client is a 
 > **Data handling:** client data must be handled per firm policy. The app does not make independence determinations; follow the firm's official independence process.
 
 ## Status
-Phases 1-3 built. Phase 2 (real research and scoring) is covered by offline tests; run `npm run smoke` with a key to verify it live. See [docs/acceptance.md](docs/acceptance.md) and the phase plan below.
+Phases 1-3 built. Real research and scoring (Anthropic or OpenRouter) is covered by offline tests with fake clients; run `npm run smoke` with a key to verify it live. See [docs/acceptance.md](docs/acceptance.md) and the phase plan below.
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -26,12 +26,27 @@ No login yet: use the **Viewing as** switcher (top right) to act as a consultant
 - Email is a stub (logged to the server console); in-app notifications are real.
 
 ## Real AI mode
+Pick a provider by setting a key in `.env` (copy `.env.example`; keys stay on the server):
+
+| Provider | Set | Notes |
+|---|---|---|
+| **OpenRouter** (DeepSeek and other open-weight models) | `OPENROUTER_API_KEY`, optionally `OPENROUTER_MODEL` (default `deepseek/deepseek-chat`) | Web research through OpenRouter's web plugin. Cheapest option. |
+| **Anthropic** (Claude) | `ANTHROPIC_API_KEY`, optionally `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`) | Native web search/fetch tools. |
+| Mock | nothing | Illustrative data, no cost. |
+
+`LLM_PROVIDER=openrouter|anthropic|mock` forces a choice (default: Anthropic if its key is set, else OpenRouter, else mock).
+
 ```bash
-cp .env.example .env     # add ANTHROPIC_API_KEY (stays on the server)
-npm run dev              # uses the real provider when a key is set, otherwise the mock
+cp .env.example .env     # add your key
+npm run dev              # the startup line shows which provider and model are active
 npm run smoke -w @ainative/api -- "Qualify Acme Insurance, UK P&C insurer"   # live check with timings
 ```
-How it works: one call reads the request; two research calls (client and sector, in parallel) use web search; a separate scoring call returns schema-constrained JSON. In code, a claim only stays a **Fact** if its source was actually retrieved, otherwise it is downgraded to **Inference**. Tier, score and the audit gate are computed in code, never by the model. Sector research is cached for 30 days (refresh button on the scorecard). Model defaults to `claude-sonnet-5-5` (`ANTHROPIC_MODEL` to change).
+
+**OpenRouter data handling.** Requests are sent with `data_collection: "deny"`, so OpenRouter only uses hosts that do not store or train on prompts (set `OPENROUTER_ALLOW_DATA_COLLECTION=true` to relax this, and `OPENROUTER_PROVIDERS` to pin hosts). Check that your firm's policy approves the chosen model and its hosts before entering client information: approval for one provider does not carry over to another.
+
+**How it works** (same pipeline for every provider): one call reads the request; research calls for the client and the sector run in parallel; a separate scoring call returns schema-constrained JSON. In code, a claim only stays a **Fact** if its source was actually retrieved, otherwise it is downgraded to **Inference**. Tier, score and the audit gate are computed in code, never by the model. Sector research is cached for 30 days (refresh button on the scorecard).
+
+OpenRouter specifics: the model writes three short search queries per topic and each runs through the web plugin (citations come back as annotations; only those URLs can back a Fact). JSON-schema output is used where a host supports it, otherwise JSON mode; replies are always validated against the schema, with one repair retry. Pasted URLs are not fetched directly (Anthropic mode does fetch them). PDFs are summarised by the file parser.
 
 ## Run
 ```bash

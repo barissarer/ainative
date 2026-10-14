@@ -1,13 +1,14 @@
 /**
  * Live check against the real API (costs a small amount). Usage:
- *   ANTHROPIC_API_KEY=... npm run smoke -w @ainative/api -- "Qualify Acme Insurance, UK P&C insurer"
+ *   OPENROUTER_API_KEY=... (or ANTHROPIC_API_KEY=...) npm run smoke -w @ainative/api -- "Qualify Acme Insurance, UK P&C insurer"
  */
 import { openDb } from "./db";
 import { makeSectorStore } from "./app";
-import { AnthropicProvider } from "./llm/anthropic";
+import { makeProvider } from "./llm/factory";
 
 const db = await openDb("memory://");
-const llm = new AnthropicProvider({ sectors: makeSectorStore(db) });
+const { llm, label } = makeProvider(makeSectorStore(db));
+console.log(`Provider: ${label}`);
 const message = process.argv.slice(2).join(" ") || "Qualify Acme Insurance, mid-size P&C insurer in the UK";
 const t0 = Date.now();
 for await (const ev of llm.qualify({ message, user: "smoke" })) {
