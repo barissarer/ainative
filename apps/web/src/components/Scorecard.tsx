@@ -5,7 +5,7 @@ import { TierBadge } from "./Bits";
 
 const tag = (t: string) => (t === "Fact" ? "bg-brand/20" : t === "Leader-informed" ? "bg-black text-white" : "bg-neutral-100");
 
-export default function Scorecard({ client, q, gateBanner, gateNote }: { client: Client; q: Qualification; gateBanner?: string; gateNote?: string }) {
+export default function Scorecard({ client, q, gateBanner, gateNote, onRefreshSector, busy }: { client: Client; q: Qualification; gateBanner?: string; gateNote?: string; onRefreshSector?: () => void; busy?: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
   const radar = q.dimensions.map((d) => ({ dim: DIMENSION_LABELS[d.key].split(" ")[0], score: d.score }));
   const evById = new Map(q.evidence.map((e) => [e.id, e]));
@@ -88,6 +88,13 @@ export default function Scorecard({ client, q, gateBanner, gateNote }: { client:
           </div>
           <div className="card p-3 text-sm"><h3 className="mb-1 font-semibold">Key risks</h3><ul className="list-disc pl-5">{q.risks.map((r) => <li key={r}>{r}</li>)}</ul></div>
           <div className="card p-3 text-sm"><h3 className="mb-1 font-semibold">Open questions</h3><ul className="list-disc pl-5">{q.open_questions.map((r) => <li key={r}>{r}</li>)}</ul></div>
+          {q.sector_research && (
+            <div className="card p-3 text-sm">
+              <h3 className="mb-1 font-semibold">Sector research</h3>
+              <p className="text-neutral-600">{q.sector_research.sector} research last refreshed on {new Date(q.sector_research.refreshed_at).toLocaleDateString()}.</p>
+              <button className="btn mt-2" disabled={busy || !onRefreshSector} onClick={onRefreshSector}>Refresh sector research</button>
+            </div>
+          )}
           <div className="card p-3 text-sm">
             <h3 className="mb-1 font-semibold">Account leader input</h3>
             <p className="text-neutral-600">No leader input yet. Brand permission and executive relationship are AI estimates.</p>

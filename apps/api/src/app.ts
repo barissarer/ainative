@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import type { Qualification, Client } from "@ainative/shared";
 import { audit, type Db } from "./db";
-import type { LlmProvider } from "./llm/types";
+import type { LlmProvider, Attachment, SectorStore } from "./llm/types";
 import { loadIndependence, loadMethodology } from "./config";
 
 const id = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
@@ -37,8 +37,25 @@ async function save(db: Db, client: Client, q: Omit<Qualification, "id" | "versi
   return (await latest(db, client.id))!;
 }
 
+export function makeSectorStore(db: Db): SectorStore {
+  return {
+    async get(sector) {
+      const r = await db.query("select * from sector_research where sector=$1", [sector]);
+      const x: any = r.rows[0];
+      return x ? { sector: x.sector, summary: x.summary, ai_impact_view: x.ai_impact_view, sources: x.sources, refreshed_at: new Date(x.refreshed_at).toISOString() } : undefined;
+    },
+    async save(r) {
+      await db.query(
+        `insert into sector_research (sector,summary,ai_impact_view,sources,refreshed_at) values ($1,$2,$3,$4,$5)
+         on conflict (sector) do update set summary=excluded.summary, ai_impact_view=excluded.ai_impact_view, sources=excluded.sources, refreshed_at=excluded.refreshed_at`,
+        [r.sector, r.summary, r.ai_impact_view, JSON.stringify(r.sources), r.refreshed_at],
+      );
+    },
+  };
+}
+
 export async function buildApp(db: Db, llm: LlmProvider) {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024 });
   await app.register(cors, { origin: true });
 
   app.get("/api/health", async () => ({ ok: true, llm: llm.name }));
@@ -74,11 +91,16 @@ export async function buildApp(db: Db, llm: LlmProvider) {
     return r.rows;
   });
 
+  app.get<{ Params: { sector: string } }>("/api/sectors/:sector", async (req, reply) => {
+    const r = await makeSectorStore(db).get(req.params.sector);
+    return r ?? reply.code(404).send({ error: "no research yet" });
+  });
+
   app.get("/api/audit-log", async () => (await db.query("select * from audit_log order by id desc limit 200")).rows);
 
   /** Chat endpoint: streams progress events over SSE, then the saved result. */
-  app.post<{ Body: { message: string; client_id?: string; user?: string } }>("/api/chat", async (req, reply) => {
-    const { message, client_id, user = "demo.consultant" } = req.body ?? ({} as any);
+  app.post<{ Body: { message: string; client_id?: string; user?: string; attachments?: Attachment[]; refresh_sector?: boolean } }>("/api/chat", async (req, reply) => {
+    const { message, client_id, user = "demo.consultant", attachments, refresh_sector } = req.body ?? ({} as any);
     if (!message?.trim()) return reply.code(400).send({ error: "message required" });
 
     reply.raw.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "Access-Control-Allow-Origin": "*" });
@@ -92,7 +114,7 @@ export async function buildApp(db: Db, llm: LlmProvider) {
         const c = await db.query("select * from clients where id=$1", [client_id]);
         previousClient = c.rows[0] as Client | undefined;
       }
-      for await (const ev of llm.qualify({ message, previous, previousClient, user })) {
+      for await (const ev of llm.qualify({ message, previous, previousClient, user, attachments, forceSectorRefresh: refresh_sector })) {
         if (ev.type === "result") {
           const saved = await save(db, ev.client, ev.qualification, previous ? `Refined: ${message}` : "Initial qualification");
           send("result", { client: ev.client, qualification: saved, reply: ev.reply });

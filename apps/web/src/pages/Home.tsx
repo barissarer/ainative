@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { DIMENSION_LABELS, type Client, type Qualification } from "@ainative/shared";
-import { getClient, getConfig, streamChat } from "../api";
+import { getClient, getConfig, streamChat, type Attachment } from "../api";
 import Scorecard from "../components/Scorecard";
 import { TierBadge } from "../components/Bits";
 
@@ -30,6 +30,7 @@ export default function Home() {
   const [client, setClient] = useState<Client | null>(null);
   const [q, setQ] = useState<Qualification | null>(null);
   const [cfg, setCfg] = useState<{ gate_banner: string; gate_note: string; llm: string } | null>(null);
+  const [files, setFiles] = useState<Attachment[]>([]);
   const end = useRef<HTMLDivElement>(null);
 
   useEffect(() => { getConfig().then(setCfg).catch(() => {}); }, []);
@@ -39,14 +40,27 @@ export default function Home() {
   }, [params]);
   useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, steps]);
 
-  async function send(text: string) {
+  async function attach(list: FileList | null) {
+    if (!list) return;
+    const read = (f: File) => new Promise<Attachment>((res) => {
+      const r = new FileReader();
+      r.onload = () => res({ name: f.name, media_type: f.type || "text/plain", data: String(r.result).split(",")[1] ?? "" });
+      r.readAsDataURL(f);
+    });
+    const added = await Promise.all([...list].map(read));
+    setFiles((cur) => [...cur, ...added]);
+  }
+
+  async function send(text: string, opts: { refreshSector?: boolean } = {}) {
     if (!text.trim() || busy) return;
+    const attachments = files;
     setInput("");
+    setFiles([]);
     setBusy(true);
     setSteps([]);
-    setMsgs((m) => [...m, { role: "user", text }]);
+    setMsgs((m) => [...m, { role: "user", text: attachments.length ? `${text}\n📎 ${attachments.map((a) => a.name).join(", ")}` : text }]);
     const log: string[] = [];
-    await streamChat({ message: text, client_id: client?.id }, {
+    await streamChat({ message: text, client_id: client?.id, attachments: attachments.length ? attachments : undefined, refresh_sector: opts.refreshSector }, {
       onProgress: (p) => { log.push(p); setSteps([...log]); },
       onQuestion: (qu) => setMsgs((m) => [...m, { role: "assistant", text: qu.text, chips: qu.chips }]),
       onResult: (r) => {
@@ -117,15 +131,17 @@ export default function Home() {
             <div className="flex flex-wrap gap-2">{REFINEMENTS.map((r) => <button key={r} className="chip hover:bg-neutral-100" onClick={() => send(r)}>{r}</button>)}</div>
           </div>
         )}
+        {files.length > 0 && <div className="flex flex-wrap gap-2 border-t border-neutral-100 px-5 pt-2">{files.map((f) => <span key={f.name} className="chip">📎 {f.name} <button className="ml-1" onClick={() => setFiles((c) => c.filter((x) => x !== f))}>×</button></span>)}</div>}
         <form className="flex gap-2 border-t border-neutral-200 p-3" onSubmit={(e) => { e.preventDefault(); send(input); }}>
           <input className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-brand focus:outline-none" placeholder={q ? "Refine, e.g. “Weight executive relationship higher”" : "Qualify Acme Insurance, UK P&C insurer…"} value={input} onChange={(e) => setInput(e.target.value)} />
+          <label className="btn cursor-pointer" title="Attach a PDF or text file (account plan, notes)">Attach<input type="file" hidden multiple accept=".pdf,.txt,.md" onChange={(e) => { attach(e.target.files); e.target.value = ""; }} /></label>
           <button className="btn-primary" disabled={busy}>Send</button>
         </form>
         {cfg?.llm === "mock" && <div className="bg-neutral-50 px-3 py-1 text-center text-xs text-neutral-500">Demo mode: results are illustrative mock data.</div>}
       </section>
 
       <section className="min-h-0 overflow-y-auto bg-neutral-50/50">
-        {client && q ? <Scorecard client={client} q={q} gateBanner={cfg?.gate_banner} gateNote={cfg?.gate_note} /> : (
+        {client && q ? <Scorecard client={client} q={q} gateBanner={cfg?.gate_banner} gateNote={cfg?.gate_note} busy={busy} onRefreshSector={() => send("Re-run with refreshed sector research", { refreshSector: true })} /> : (
           <div className="flex h-full items-center justify-center p-10 text-center text-sm text-neutral-500">Your scorecard will appear here.</div>
         )}
       </section>

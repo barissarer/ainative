@@ -130,6 +130,7 @@ export const Qualification = z.object({
   entry_point: EntryPoint,
   open_questions: z.array(z.string()),
   gate: Gate,
+  sector_research: z.object({ sector: z.string(), refreshed_at: z.string() }).nullable().optional(),
   override: z
     .object({ tier: Tier.optional(), reason: z.string(), by: z.string(), at: z.string() })
     .nullable(),
@@ -148,3 +149,17 @@ export const SectorResearch = z.object({
 export type SectorResearch = z.infer<typeof SectorResearch>;
 
 export type Role = "consultant" | "account_leader" | "risk_independence" | "leadership" | "admin";
+
+export const SECTOR_OPTIONS = [
+  "Banking",
+  "Insurance",
+  "Asset & Wealth Management",
+  "Retail & Consumer",
+  "Life Sciences & Health",
+  "Energy & Resources",
+  "Technology, Media & Telecom",
+  "Industrials & Manufacturing",
+  "Public Sector",
+  "Transport & Logistics",
+  "Other",
+] as const;

@@ -24,7 +24,9 @@ export interface ChatHandlers {
 }
 
 /** POST + SSE stream (EventSource can't POST, so parse the stream manually). */
-export async function streamChat(body: { message: string; client_id?: string }, h: ChatHandlers) {
+export interface Attachment { name: string; media_type: string; data: string }
+
+export async function streamChat(body: { message: string; client_id?: string; attachments?: Attachment[]; refresh_sector?: boolean }, h: ChatHandlers) {
   const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!res.ok || !res.body) return h.onError("The request failed. Please try again.");
   const reader = res.body.getReader();
