@@ -4,7 +4,8 @@ import Home from "./pages/Home";
 import Clients from "./pages/Clients";
 import MyRequests from "./pages/MyRequests";
 import LeaderReview from "./pages/LeaderReview";
-import { Compare } from "./pages/Stubs";
+import Compare from "./pages/Compare";
+import Bulk from "./pages/Bulk";
 import { api, getUserId, setUserId, type DemoUser } from "./api";
 
 const link = ({ isActive }: { isActive: boolean }) =>
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/" element={<Home role={me.role} key={uid} />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/compare" element={<Compare />} />
+          <Route path="/bulk" element={<Bulk />} />
           <Route path="/requests" element={<MyRequests meName={me.name} />} />
           <Route path="/requests/:id" element={<LeaderReview key={uid} />} />
         </Routes>

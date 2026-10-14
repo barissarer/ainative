@@ -1,4 +1,5 @@
 import type { Qualification, Client, SectorResearch } from "@ainative/shared";
+import type { SearchFilter } from "../search";
 
 export type ProgressEvent = { type: "progress"; message: string };
 export type QuestionEvent = { type: "question"; text: string; chips?: string[] };
@@ -54,6 +55,8 @@ export interface LlmProvider {
   qualify(req: QualifyRequest): AsyncGenerator<LlmEvent>;
   /** Map free text (typed or dictated) onto the three leader lenses. Output is a draft for the leader to confirm. */
   mapLeaderText(text: string, context: string): Promise<LeaderDraft>;
+  /** Turn a plain-English question about the client list into a structured filter. Code applies it. */
+  parseSearch(query: string): Promise<SearchFilter>;
   /** Suggest a softer entry point or different sponsor when leader input conflicts with the AI view. */
   proposeApproach(context: string): Promise<string | null>;
 }

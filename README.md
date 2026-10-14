@@ -5,14 +5,14 @@ Module 1: **Client Qualification**. Chat-first scoring of whether a client is a 
 > **Data handling:** client data must be handled per firm policy. The app does not make independence determinations; follow the firm's official independence process.
 
 ## Status
-Phases 1-3 built. Real research and scoring (Anthropic or OpenRouter) is covered by offline tests with fake clients; run `npm run smoke` with a key to verify it live. See [docs/acceptance.md](docs/acceptance.md) and the phase plan below.
+Phases 1-4 built. Real research and scoring (Anthropic or OpenRouter) is covered by offline tests with fake clients; run `npm run smoke` with a key to verify it live. See [docs/acceptance.md](docs/acceptance.md) and the phase plan below.
 
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Monorepo, data model, chat + scorecard layout, mock LLM, scoring + gate logic | Done |
 | 2 | Real research (web search) and scoring via Anthropic, sector memory, refinement, PDF/text attachments | Built, needs live check |
 | 3 | Account leader input, role-restricted audit gate, conflict highlighting | Built (tested on mock AI) |
-| 4 | Clients search, compare, bulk mode, overrides, PDF export | |
+| 4 | Clients search, compare, bulk mode, overrides, one-pager PDF, hand-off, hosted-database and deploy support | Built (tested on mock AI) |
 
 ## Account leaders and the audit gate (Phase 3)
 No login yet: use the **Viewing as** switcher (top right) to act as a consultant, one of three account leaders, the Risk / Independence role, or leadership. The server looks the role up from the user, and enforces it on gate changes.
@@ -24,6 +24,14 @@ No login yet: use the **Viewing as** switcher (top right) to act as a consultant
 - **Audit gate**: follows leaders' answers (audit or related-entity audit client -> restricted, tier capped at "Nurture (advisory-only)"; "Unsure" -> blocks "Pursue now" and notifies Risk). Leaders and the AI can only tighten it. Only the **Risk / Independence** role can clear or change it, with a required reason; every change and every denied attempt is audit-logged. After Risk decides, only newer leader answers can re-tighten it. Caps come from `config/independence.yaml` (placeholder rules, not validated by Risk).
 - **Leader commentary** is hidden from the read-only leadership role.
 - Email is a stub (logged to the server console); in-app notifications are real.
+
+## Clients, compare, bulk, overrides (Phase 4)
+- **Clients**: sortable table with status chips (Awaiting leader input, Leader-informed, Audit restriction, In campaign). The search bar takes plain English ("banking clients rated Pursue now with low confidence"). The AI only proposes a structured filter; code applies it, and the page shows how the question was understood so it can be corrected.
+- **Compare**: tick 2 to 4 clients, side by side across every dimension, leader disagreement, gate, entry point and risks.
+- **Bulk qualify**: paste or upload up to 25 names (one per line, optionally with context) for a ranked first pass. Already-qualified clients are ranked from their saved result.
+- **Overrides**: any dimension score or the tier can be overridden with a required reason. The AI view is kept and shown, both are written to the audit log, and overrides survive AI re-runs. The audit gate cannot be overridden and still caps the tier.
+- **Version history** on every scorecard (who, when, why). **Save to campaign**, **one-pager PDF** (no leader commentary), and a **hand-off package** (JSON, no leader commentary) for the Narrative builder module.
+- Hosting: see [DEPLOY.md](DEPLOY.md). There is deliberately **no login**; see the warning there.
 
 ## Real AI mode
 Pick a provider by setting a key in `.env` (copy `.env.example`; keys stay on the server):

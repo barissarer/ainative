@@ -12,8 +12,10 @@ import {
 } from "@ainative/shared";
 import type { LeaderDraft, LlmEvent, LlmProvider, QualifyRequest } from "./types";
 import { loadGateRules, loadMethodology } from "../config";
+import { EMPTY_FILTER, type SearchFilter } from "../search";
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Simulated research time so the progress UI is visible in demos. Set MOCK_DELAY_MS=0 to skip (tests do). */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, Number(process.env.MOCK_DELAY_MS ?? ms)));
 
 function hash(s: string) {
   let h = 2166136261;
@@ -89,7 +91,7 @@ export class MockProvider implements LlmProvider {
 
     const evidence: Evidence[] = [];
     const dims: DimensionScore[] = DIMENSION_KEYS.map((key: DimensionKey, i) => {
-      const score = 2 + ((h >> (i * 3)) % 4); // 2..5
+      const score = 2 + ((h >>> (i * 3)) % 4); // 2..5 (unsigned shift: a signed one goes negative)
       const evId = `ev_${key}`;
       const isLeaderDim = key === "brand_permission" || key === "exec_relationship";
       evidence.push({
@@ -106,7 +108,7 @@ export class MockProvider implements LlmProvider {
         key,
         score,
         rationale: `${MOCK_NOTICE} Illustrative rationale for ${DIMENSION_LABELS[key].toLowerCase()} at ${name}.`,
-        confidence: isLeaderDim ? "Low" : (["Med", "High", "Low"] as const)[(h >> i) % 3],
+        confidence: isLeaderDim ? "Low" : (["Med", "High", "Low"] as const)[(h >>> i) % 3],
         origin: "AI-estimated",
         evidence_ids: [evId],
       };
@@ -173,5 +175,30 @@ export class MockProvider implements LlmProvider {
 
   async proposeApproach(): Promise<string | null> {
     return `${MOCK_NOTICE} Suggested: open with a sector-insight conversation through the relationship owner, and test appetite with a different sponsor before pitching a full transformation.`;
+  }
+
+  /** Keyword parser so list search can be demoed without an API key. */
+  async parseSearch(query: string): Promise<SearchFilter> {
+    const q = query.toLowerCase();
+    const f: SearchFilter = { ...EMPTY_FILTER, sectors: [], tiers: [], confidence: [], gate: [], statuses: [] };
+    for (const [re, name] of SECTORS) if (re.test(q)) f.sectors.push(name);
+    if (/pursue[ -]?now/.test(q)) f.tiers.push("Pursue now");
+    if (/deprioriti[sz]e/.test(q)) f.tiers.push("Deprioritize");
+    if (/\bnurture\b/.test(q)) f.tiers.push("Nurture");
+    for (const c of [["low", "Low"], ["medium|med", "Med"], ["high", "High"]] as const) if (new RegExp(`${c[0]} confidence|confidence (is )?${c[0]}`).test(q)) f.confidence.push(c[1]);
+    if (/(exec\w*|executive) access (is |are )?strong|strong exec\w* access/.test(q)) f.exec_access = "strong";
+    if (/(exec\w*|executive) access (is |are )?weak|weak exec\w* access/.test(q)) f.exec_access = "weak";
+    if (/no audit|not (an )?audit/.test(q)) f.audit_relationship = "none";
+    else if (/audit (restriction|relationship|client)/.test(q)) f.audit_relationship = "present";
+    if (/awaiting leader/.test(q)) f.statuses.push("Awaiting leader input");
+    if (/leader[- ]informed/.test(q)) f.statuses.push("Leader-informed");
+    if (/in (the )?campaign/.test(q)) f.statuses.push("In campaign");
+    const above = q.match(/(?:above|over|more than|at least|>=?)\s*(\d{1,3})/);
+    const below = q.match(/(?:below|under|less than|<=?)\s*(\d{1,3})/);
+    if (above) f.min_score = Number(above[1]);
+    if (below) f.max_score = Number(below[1]);
+    const isEmpty = !f.sectors.length && !f.tiers.length && !f.confidence.length && !f.exec_access && !f.audit_relationship && !f.statuses.length && f.min_score == null && f.max_score == null;
+    if (isEmpty) f.name_contains = query.trim();
+    return f;
   }
 }

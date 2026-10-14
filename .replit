@@ -1,0 +1,18 @@
+# Replit configuration (best effort: adjust in the Replit UI if your plan or template differs).
+modules = ["nodejs-22"]
+run = "npm run start:prod"
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+deploymentTarget = "cloudrun"
+build = ["sh", "-c", "npm ci && npm run build"]
+run = ["sh", "-c", "npm run start:prod"]
+
+[[ports]]
+localPort = 8787
+externalPort = 80
+
+[env]
+PORT = "8787"

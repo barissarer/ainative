@@ -9,6 +9,10 @@ describe("overallScore", () => {
     expect(overallScore(all(1), DEFAULT_WEIGHTS)).toBe(0);
     expect(overallScore(all(5), DEFAULT_WEIGHTS)).toBe(100);
   });
+  it("clamps out-of-range scores", () => {
+    expect(overallScore(all(-4), DEFAULT_WEIGHTS)).toBe(0);
+    expect(overallScore(all(9), DEFAULT_WEIGHTS)).toBe(100);
+  });
   it("respects weights", () => {
     const dims = [{ key: "exec_relationship" as const, score: 5 }, { key: "ai_impact" as const, score: 1 }];
     expect(overallScore(dims, { exec_relationship: 90, ai_impact: 10 })).toBe(90);

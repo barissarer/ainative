@@ -7,5 +7,5 @@
 - [x] Audit gate caps the tier in deterministic code; only the Risk role can clear it, with a logged reason (tested in `leaders.api.test.ts`)
 - [x] Leader/leader and leader/AI conflicts shown clearly
 - [x] Scorecard labels AI-estimated vs leader-informed (origin chip)
-- [ ] Overrides, leader inputs, gate changes versioned and auditable (leader inputs and gate changes done; human overrides are Phase 4)
-- [ ] Saved qualification in Clients list and hand-off (list done; hand-off is a stub)
+- [x] Overrides, leader inputs, gate changes versioned and auditable (version history with reasons; audit log keeps AI view and override)
+- [x] Saved qualification in Clients list and hand-off (Save to campaign, hand-off JSON package for later modules)

@@ -36,7 +36,7 @@ export function overallScore(dims: Pick<DimensionScore, "key" | "score">[], weig
   let den = 0;
   for (const d of dims) {
     const w = weights[d.key] ?? 0;
-    num += w * ((d.score - 1) / 4);
+    num += w * ((Math.max(1, Math.min(5, d.score)) - 1) / 4); // clamp: a stray out-of-range score must not distort the total
     den += w;
   }
   return den === 0 ? 0 : Math.round((num / den) * 100);

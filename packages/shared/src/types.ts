@@ -133,6 +133,7 @@ export const Qualification = z.object({
   open_questions: z.array(z.string()),
   gate: Gate,
   leader_summary: z.any().nullable().optional(), // LeaderSummary, see leaders.ts
+  change_reason: z.string().optional(), // why this version was created
   sector_research: z.object({ sector: z.string(), refreshed_at: z.string() }).nullable().optional(),
   override: z
     .object({ tier: Tier.optional(), reason: z.string(), by: z.string(), at: z.string() })

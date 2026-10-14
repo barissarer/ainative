@@ -81,3 +81,18 @@ export const LeaderMapSchema = z.object({
     .nullable(),
   inferred_fields: z.array(z.string()),
 });
+
+export const SearchFilterSchema = z.object({
+  sectors: z.array(z.string()),
+  tiers: z.array(z.enum(["Pursue now", "Nurture", "Nurture (advisory-only)", "Deprioritize"])),
+  confidence: z.array(z.enum(["High", "Med", "Low"])),
+  min_score: z.number().nullable(),
+  max_score: z.number().nullable(),
+  gate: z.array(z.enum(["none", "restricted", "unresolved", "cleared"])),
+  statuses: z.array(z.enum(["Awaiting leader input", "Leader-informed", "Audit restriction", "Audit status unresolved", "In campaign"])),
+  exec_access: z.enum(["strong", "weak"]).nullable(),
+  brand_permission: z.enum(["strong", "weak"]).nullable(),
+  audit_relationship: z.enum(["none", "present"]).nullable(),
+  name_contains: z.string().nullable(),
+  sort: z.enum(["score", "updated", "name"]).nullable(),
+});

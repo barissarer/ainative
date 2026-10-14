@@ -2,12 +2,16 @@
   "name": "ainative",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "dev": "concurrently -n api,web -c green,black \"npm run dev -w @ainative/api\" \"npm run dev -w @ainative/web\"",
-    "build": "npm run build -w @ainative/shared && npm run build -w @ainative/web",
+    "build": "npm run build -w @ainative/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "start:prod": "npm run start:prod -w @ainative/api"
   },
   "devDependencies": {
     "concurrently": "^9.0.1",

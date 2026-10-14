@@ -124,6 +124,7 @@ export function applyLeaderInputs(
 
   const set = (key: "brand_permission" | "exec_relationship", score: number | null, label: string, lines: { by: string; text: string }[]) => {
     const d = dims.find((x) => x.key === key)!;
+    if (d.origin === "Human override") return; // a person's explicit override wins over leader input
     d.evidence_ids = d.evidence_ids.filter((id) => !id.startsWith(`ev_${key}_L`));
     if (score == null) {
       if (d.origin === "Leader-informed") { d.origin = "AI-estimated"; d.score = d.ai_score ?? d.score; }
@@ -167,7 +168,7 @@ export function applyLeaderInputs(
     gate,
     overall_score: score,
     ai_tier,
-    tier: q.override?.tier ?? applyGate(ai_tier, gate, o.rules),
+    tier: applyGate(q.override?.tier ?? ai_tier, gate, o.rules), // a human tier override can never lift the audit cap
     confidence: overallConfidence(dims),
     leader_summary: {
       leaders: inputs.map((i) => ({ id: i.author.id, name: i.author.name, role: i.author.role, created_at: i.created_at, source: i.source })),
@@ -178,4 +179,70 @@ export function applyLeaderInputs(
   };
   out.pitch_readiness = pitchReadiness(out, inputs.length > 0);
   return out;
+}
+
+
+// ---------------------------------------------------------------- human overrides
+
+export type TierName = "Pursue now" | "Nurture" | "Deprioritize";
+
+/** Recompute score, tier and confidence from the current dimensions. The audit gate always caps, including over an override. */
+export function recompute(q: Q, o: { rules: GateRules; thresholds: TierThresholds }): Q {
+  const score = overallScore(q.dimensions, q.weights);
+  const ai_tier = baseTier(score, o.thresholds);
+  const next: Q = { ...q, overall_score: score, ai_tier, tier: applyGate(q.override?.tier ?? ai_tier, q.gate, o.rules), confidence: overallConfidence(q.dimensions) };
+  next.pitch_readiness = pitchReadiness(next, !!(next.leader_summary as any)?.leaders?.length);
+  return next;
+}
+
+/** Override one dimension's score. Keeps the AI/leader view in the record and attaches the reason as visible evidence. */
+export function overrideDimension(q: Q, key: string, score: number, reason: string, by: string, now: string): Q {
+  const dims = q.dimensions.map((d) => ({ ...d }));
+  const d = dims.find((x) => x.key === key);
+  if (!d) throw new Error("Unknown dimension");
+  const s = Math.max(1, Math.min(5, Math.round(score)));
+  const before = { score: d.score, origin: d.origin };
+  if (d.origin !== "Human override" && d.ai_score == null) d.ai_score = d.score;
+  const evId = `ev_${key}_H${q.evidence.length}`;
+  d.score = s;
+  d.origin = "Human override";
+  d.rationale = `Overridden by ${by} (was ${before.score}/5, ${before.origin}): ${reason}`;
+  d.evidence_ids = [...d.evidence_ids.filter((id) => !id.startsWith(`ev_${key}_H`)), evId];
+  const evidence = [...q.evidence.filter((e) => !(e.dimension === key && e.id.startsWith(`ev_${key}_H`))), { id: evId, dimension: key, source: "user", snippet: `${by}: ${reason}`, type: "User-provided" as const, retrieved_at: now }];
+  return { ...q, dimensions: dims, evidence };
+}
+
+export function overrideTier(q: Q, tier: TierName, reason: string, by: string, now: string): Q {
+  return { ...q, override: { tier, reason, by, at: now } };
+}
+
+/** Undo an override. A dimension goes back to the AI estimate (leader input is re-applied afterwards by the caller). */
+export function clearOverride(q: Q, target: { kind: "dimension"; key: string } | { kind: "tier" }): Q {
+  if (target.kind === "tier") return { ...q, override: null };
+  const dims = q.dimensions.map((d) => ({ ...d }));
+  const d = dims.find((x) => x.key === target.key);
+  if (!d || d.origin !== "Human override") return q;
+  d.score = d.ai_score ?? d.score;
+  d.origin = "AI-estimated";
+  d.rationale = "Override removed; back to the AI estimate.";
+  d.evidence_ids = d.evidence_ids.filter((id) => !id.startsWith(`ev_${target.key}_H`));
+  return { ...q, dimensions: dims, evidence: q.evidence.filter((e) => !e.id.startsWith(`ev_${target.key}_H`)) };
+}
+
+/** After an AI re-run: put the person's overrides back on top of the fresh result. */
+export function carryOverrides(prev: Pick<Q, "dimensions" | "evidence" | "override">, next: Q): Q {
+  const dims = next.dimensions.map((d) => ({ ...d }));
+  let evidence = [...next.evidence];
+  for (const pd of prev.dimensions.filter((d) => d.origin === "Human override")) {
+    const d = dims.find((x) => x.key === pd.key);
+    if (!d) continue;
+    if (d.ai_score == null) d.ai_score = d.score;
+    d.score = pd.score;
+    d.origin = "Human override";
+    d.rationale = pd.rationale;
+    const ev = prev.evidence.filter((e) => e.dimension === pd.key && e.id.startsWith(`ev_${pd.key}_H`));
+    evidence = [...evidence.filter((e) => !ev.some((x) => x.id === e.id)), ...ev];
+    d.evidence_ids = [...d.evidence_ids.filter((id) => !id.startsWith(`ev_${pd.key}_H`)), ...ev.map((e) => e.id)];
+  }
+  return { ...next, dimensions: dims, evidence, override: prev.override ?? next.override };
 }

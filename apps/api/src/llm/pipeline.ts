@@ -13,7 +13,7 @@ import {
   type SectorResearch,
 } from "@ainative/shared";
 import type { Attachment, LeaderDraft, LlmEvent, LlmProvider, ProgressEvent, QualifyRequest, SectorStore } from "./types";
-import { IntakeSchema, LeaderMapSchema, ReasoningSchema, RefineSchema, SectorSummarySchema, type Intake } from "./schemas";
+import { SearchFilterSchema, IntakeSchema, LeaderMapSchema, ReasoningSchema, RefineSchema, SectorSummarySchema, type Intake } from "./schemas";
 import { formatSources, type Source } from "./sources";
 import { assemble } from "./assemble";
 import { loadGateRules, loadMethodology } from "../config";
@@ -188,7 +188,7 @@ export abstract class PipelineProvider implements LlmProvider {
       type: "result",
       client,
       reply: r.reply,
-      qualification: { ...prev, dimensions: dims, evidence, weights, overall_score: score, ai_tier, tier: prev.override?.tier ?? applyGate(ai_tier, prev.gate, loadGateRules()), confidence: overallConfidence(dims), created_by: req.user },
+      qualification: { ...prev, dimensions: dims, evidence, weights, overall_score: score, ai_tier, tier: applyGate(prev.override?.tier ?? ai_tier, prev.gate, loadGateRules()), confidence: overallConfidence(dims), created_by: req.user },
     };
   }
 
@@ -198,6 +198,15 @@ export abstract class PipelineProvider implements LlmProvider {
       LeaderMapSchema,
       `${m.prompts.leader_mapping}\nRules: set a lens to null if the text does not mention it - never guess an audit status. Quote or closely paraphrase the leader in each comment. List in inferred_fields any lens value you inferred rather than read directly. You have no ability to change or clear the audit gate; you only draft values for the leader to confirm.`,
       `Leader's words:\n${text}\n\nContext about the client (for interpretation only):\n${context}`,
+      "low",
+    );
+  }
+
+  async parseSearch(query: string) {
+    return this.structured(
+      SearchFilterSchema,
+      `Convert the user's question about a list of qualified clients into a filter. Leave a field empty or null unless the user asked for it. Sectors are free text such as "Banking" or "Insurance". "No audit relationship" means audit_relationship "none". "Executive access is strong/weak" maps to exec_access. "Pursue-now" means tier "Pursue now". Do not invent criteria.`,
+      query,
       "low",
     );
   }

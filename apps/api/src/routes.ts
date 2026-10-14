@@ -229,7 +229,7 @@ export function registerLeaderRoutes(app: FastifyInstance, db: Db, llm: LlmProvi
     const now = new Date().toISOString();
     const gate: Gate = { type: "audit_independence", status, set_by: `risk:${actor.name}`, reason: reason.trim(), cleared_by: status === "cleared" ? actor.name : null, updated_at: now };
     const { id: _i, version: _v, created_at: _c, ...base } = prev;
-    const next: Q = { ...base, gate, tier: base.override?.tier ?? applyGate(base.ai_tier, gate, loadGateRules()), created_by: actor.name };
+    const next: Q = { ...base, gate, tier: applyGate(base.override?.tier ?? base.ai_tier, gate, loadGateRules()), created_by: actor.name };
     next.pitch_readiness = pitchReadiness(next, !!(next.leader_summary as any)?.leaders?.length);
     const saved = await save(db, client, next, `Audit gate ${prev.gate.status} → ${status}: ${reason.trim()}`);
     await db.query<any>("insert into gates (id,client_id,status,set_by,reason,cleared_by) values ($1,$2,$3,$4,$5,$6)", [id("g"), req.params.id, status, gate.set_by, gate.reason, gate.cleared_by]);
