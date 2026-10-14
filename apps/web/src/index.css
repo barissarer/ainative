@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { @apply bg-white text-brand-ink antialiased; }
+.card { @apply rounded-lg border border-neutral-200 bg-white; }
+.chip { @apply inline-flex items-center rounded-full border border-neutral-300 px-2.5 py-0.5 text-xs font-medium; }
+.btn { @apply rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium hover:bg-neutral-50 disabled:opacity-50; }
+.btn-primary { @apply rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-black hover:bg-brand-dark disabled:opacity-50; }

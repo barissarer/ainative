@@ -1,0 +1,20 @@
+{
+  "name": "@ainative/api",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ainative/shared": "*",
+    "@electric-sql/pglite": "^0.2.12",
+    "@fastify/cors": "^10.0.1",
+    "fastify": "^5.1.0",
+    "yaml": "^2.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": { "tsx": "^4.19.2", "@types/node": "^22.9.0" }
+}

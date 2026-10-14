@@ -1,0 +1,17 @@
+# PLACEHOLDER RULES: not validated by Risk / Independence. Confirm before any real use.
+# The app supports the firm's official independence process; it does not make determinations.
+audit_status_rules:
+  audit_client:
+    gate: restricted
+    tier_cap: "Nurture (advisory-only)"
+  related_entity_audit_client:
+    gate: restricted
+    tier_cap: "Nurture (advisory-only)"
+  unsure:
+    gate: unresolved
+    tier_cap: "Nurture"        # blocks "Pursue now" until resolved
+  not_audit_client:
+    gate: none
+banner: "Audit relationship: independence restrictions may apply."
+constraint_note: "Implementation or delivery work may be restricted. Risk / Independence review is required before any pitch. Follow the firm's official independence process."
+notify_on_unsure: "risk-independence@example.com"

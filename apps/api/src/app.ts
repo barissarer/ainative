@@ -1,0 +1,110 @@
+import Fastify from "fastify";
+import cors from "@fastify/cors";
+import type { Qualification, Client } from "@ainative/shared";
+import { audit, type Db } from "./db";
+import type { LlmProvider } from "./llm/types";
+import { loadIndependence, loadMethodology } from "./config";
+
+const id = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
+
+function rowToQual(r: any): Qualification {
+  return { ...r.data, id: r.id, client_id: r.client_id, version: r.version, created_at: new Date(r.created_at).toISOString() };
+}
+
+async function latest(db: Db, clientId: string): Promise<Qualification | undefined> {
+  const r = await db.query("select * from qualifications where client_id=$1 order by version desc limit 1", [clientId]);
+  return r.rows[0] ? rowToQual(r.rows[0]) : undefined;
+}
+
+async function save(db: Db, client: Client, q: Omit<Qualification, "id" | "version" | "created_at">, reason: string) {
+  await db.query(
+    `insert into clients (id,name,sector,sub_sector,region,size,owner,relationship_notes) values ($1,$2,$3,$4,$5,$6,$7,$8)
+     on conflict (id) do update set name=excluded.name, sector=excluded.sector, region=coalesce(excluded.region, clients.region)`,
+    [client.id, client.name, client.sector, client.sub_sector ?? null, client.region ?? null, client.size ?? null, client.owner ?? null, client.relationship_notes ?? null],
+  );
+  const prev = await latest(db, client.id);
+  const version = (prev?.version ?? 0) + 1;
+  const qid = id("q");
+  const { client_id, created_by, overall_score, tier, confidence, ...rest } = q as any;
+  await db.query(
+    "insert into qualifications (id,client_id,version,data,overall_score,tier,confidence,created_by) values ($1,$2,$3,$4,$5,$6,$7,$8)",
+    [qid, client.id, version, JSON.stringify({ ...rest, overall_score, tier, confidence, created_by }), overall_score, tier, confidence, created_by],
+  );
+  for (const e of q.evidence) {
+    await db.query("insert into evidence (id,qualification_id,source,snippet,type) values ($1,$2,$3,$4,$5) on conflict do nothing", [`${qid}_${e.id}`, qid, e.source, e.snippet, e.type]);
+  }
+  await audit(db, { actor: created_by, action: version === 1 ? "qualification.created" : "qualification.revised", entity: "qualification", entity_id: qid, detail: { version, score: overall_score, tier }, reason });
+  return (await latest(db, client.id))!;
+}
+
+export async function buildApp(db: Db, llm: LlmProvider) {
+  const app = Fastify({ logger: false });
+  await app.register(cors, { origin: true });
+
+  app.get("/api/health", async () => ({ ok: true, llm: llm.name }));
+  app.get("/api/config", async () => {
+    const m = loadMethodology();
+    const ind = loadIndependence();
+    return { weights: m.weights, thresholds: m.thresholds, gate_banner: ind.banner, gate_note: ind.constraint_note, llm: llm.name };
+  });
+
+  app.get("/api/clients", async () => {
+    const r = await db.query(
+      `select c.*, q.id as qid, q.version, q.overall_score, q.tier, q.confidence, q.created_at as updated_at, q.data->'gate'->>'status' as gate_status
+       from clients c join lateral (select * from qualifications where client_id=c.id order by version desc limit 1) q on true
+       order by q.created_at desc`,
+    );
+    return r.rows.map((x: any) => ({
+      id: x.id, name: x.name, sector: x.sector, region: x.region, owner: x.owner,
+      score: Number(x.overall_score), tier: x.tier, confidence: x.confidence,
+      version: x.version, updated_at: new Date(x.updated_at).toISOString(), gate_status: x.gate_status,
+      statuses: [x.gate_status === "restricted" ? "Audit restriction" : null, x.gate_status === "unresolved" ? "Audit status unresolved" : null].filter(Boolean),
+    }));
+  });
+
+  app.get<{ Params: { id: string } }>("/api/clients/:id", async (req, reply) => {
+    const c = await db.query("select * from clients where id=$1", [req.params.id]);
+    if (!c.rows[0]) return reply.code(404).send({ error: "not found" });
+    const q = await latest(db, req.params.id);
+    return { client: c.rows[0], qualification: q };
+  });
+
+  app.get<{ Params: { id: string } }>("/api/clients/:id/versions", async (req) => {
+    const r = await db.query("select id,version,overall_score,tier,confidence,created_by,created_at from qualifications where client_id=$1 order by version desc", [req.params.id]);
+    return r.rows;
+  });
+
+  app.get("/api/audit-log", async () => (await db.query("select * from audit_log order by id desc limit 200")).rows);
+
+  /** Chat endpoint: streams progress events over SSE, then the saved result. */
+  app.post<{ Body: { message: string; client_id?: string; user?: string } }>("/api/chat", async (req, reply) => {
+    const { message, client_id, user = "demo.consultant" } = req.body ?? ({} as any);
+    if (!message?.trim()) return reply.code(400).send({ error: "message required" });
+
+    reply.raw.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "Access-Control-Allow-Origin": "*" });
+    const send = (ev: string, data: unknown) => reply.raw.write(`event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`);
+
+    try {
+      let previous: Qualification | undefined;
+      let previousClient: Client | undefined;
+      if (client_id) {
+        previous = await latest(db, client_id);
+        const c = await db.query("select * from clients where id=$1", [client_id]);
+        previousClient = c.rows[0] as Client | undefined;
+      }
+      for await (const ev of llm.qualify({ message, previous, previousClient, user })) {
+        if (ev.type === "result") {
+          const saved = await save(db, ev.client, ev.qualification, previous ? `Refined: ${message}` : "Initial qualification");
+          send("result", { client: ev.client, qualification: saved, reply: ev.reply });
+        } else send(ev.type, ev);
+      }
+    } catch (e: any) {
+      send("error", { message: e?.message ?? "Something went wrong" });
+    }
+    send("done", {});
+    reply.raw.end();
+    return reply;
+  });
+
+  return app;
+}

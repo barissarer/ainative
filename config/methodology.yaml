@@ -1,0 +1,25 @@
+# Editable methodology. Changes apply on next API start; no code changes needed.
+weights:
+  client_circumstances: 20   # includes trigger events
+  competitive_landscape: 10
+  sector_dynamics: 10
+  ai_impact: 10
+  offering_fit: 15
+  brand_permission: 15
+  exec_relationship: 20
+tier_thresholds:
+  pursue_now: 70
+  nurture: 45
+rubric:
+  client_circumstances: "Strategic posture, leadership sponsorship, financial capacity, data/tech maturity, trigger events (new CEO, M&A, restructuring, margin pressure, regulatory action). 5 = clear mandate and a live trigger; 1 = no appetite or capacity."
+  competitive_landscape: "How far peers and challengers have moved on AI, threat from AI-native entrants, urgency of falling behind. 5 = peers clearly ahead; 1 = no competitive pressure."
+  sector_dynamics: "Market structure, margin pressure, regulation, talent and cost structure, shifting customer expectations. 5 = strong pressure to reinvent; 1 = stable and insulated."
+  ai_impact: "Real deployments vs hype across the value chain. Keep evidenced deployments separate from forecasts. 5 = widespread proven impact; 1 = speculative only."
+  offering_fit: "Relevant credentials and offerings, likely deal size and complexity. 5 = strong credentials and large deal; 1 = weak fit."
+  brand_permission: "Leader-informed where available. 5 = strategic credibility; 1 = no permission or sensitivities."
+  exec_relationship: "Leader-informed where available. 5 = senior, strong, receptive; 1 = no access."
+prompts:
+  research: "Research the client and its sector using web search. Return only claims with a source URL; mark everything else as Inference. Never invent data."
+  reasoning: "Score each dimension 1-5 using the rubric. Give a one-to-two sentence rationale, a confidence level, and cite evidence ids. Lower confidence when evidence is weak."
+  refine: "Apply the user's instruction to the existing qualification (weights, assumptions). Return the full updated structured result."
+  leader_mapping: "Map the leader's free text onto the three lenses. Return structured values and flag anything you inferred. Never touch the audit gate."
