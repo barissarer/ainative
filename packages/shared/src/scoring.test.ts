@@ -27,6 +27,10 @@ describe("tiers and gate", () => {
   it("blocks Pursue now while unresolved", () => {
     expect(applyGate("Pursue now", { status: "unresolved" })).toBe("Nurture");
   });
+  it("relabels a plain Nurture as advisory-only when restricted", () => {
+    expect(applyGate("Nurture", { status: "restricted" })).toBe("Nurture (advisory-only)");
+    expect(applyGate("Nurture", { status: "unresolved" })).toBe("Nurture");
+  });
   it("never raises a tier", () => {
     expect(applyGate("Deprioritize", { status: "restricted" })).toBe("Deprioritize");
   });

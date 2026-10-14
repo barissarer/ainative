@@ -10,8 +10,8 @@ import {
   type Evidence,
   type Gate,
 } from "@ainative/shared";
-import type { LlmEvent, LlmProvider, QualifyRequest } from "./types";
-import { loadMethodology } from "../config";
+import type { LeaderDraft, LlmEvent, LlmProvider, QualifyRequest } from "./types";
+import { loadGateRules, loadMethodology } from "../config";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -62,7 +62,7 @@ export class MockProvider implements LlmProvider {
       }
       const prev = req.previous;
       const score = overallScore(prev.dimensions, weights);
-      const tier = applyGate(baseTier(score, method.thresholds), prev.gate);
+      const tier = applyGate(baseTier(score, method.thresholds), prev.gate, loadGateRules());
       yield {
         type: "result",
         client: req.previousClient,
@@ -116,7 +116,7 @@ export class MockProvider implements LlmProvider {
     const score = overallScore(dims, weights);
     const gate: Gate = { type: "audit_independence", status: "unresolved", set_by: "system", reason: "Audit relationship not yet confirmed by a leader.", cleared_by: null, updated_at: now };
     const ai_tier = baseTier(score, method.thresholds);
-    const tier = applyGate(ai_tier, gate);
+    const tier = applyGate(ai_tier, gate, loadGateRules());
 
     yield { type: "question", text: "Do you know whether the leadership team has an AI mandate?", chips: ["Yes", "No", "Not sure"] };
 
@@ -133,7 +133,7 @@ export class MockProvider implements LlmProvider {
         ai_tier,
         tier,
         confidence: overallConfidence(dims),
-        headline_why: `${name} scores ${score}/100 on the framework. ${MOCK_NOTICE}`,
+        headline_why: `First-pass view of ${name} against the seven-dimension framework. ${MOCK_NOTICE}`,
         pitch_readiness: "Illustrative: confirm audit status and executive access with an account leader before pitching.",
         risks: ["Executive access unverified", "Audit relationship unresolved"],
         entry_point: {
@@ -147,5 +147,31 @@ export class MockProvider implements LlmProvider {
         created_by: req.user,
       },
     };
+  }
+
+  /** Keyword heuristic so the leader flow can be demoed without an API key. */
+  async mapLeaderText(text: string): Promise<LeaderDraft> {
+    const t = text.toLowerCase();
+    const has = (re: RegExp) => re.test(t);
+    const brand: LeaderDraft["brand_permission"] = has(/nothing strategic|only cost|tactical|weak permission|sensitiv|delivery issue/)
+      ? { rating: "Weak", comment: text }
+      : has(/strategic|trusted|strong (brand|permission|credib)|lots of .*work/) ? { rating: "Strong", comment: text }
+      : has(/some work|moderate/) ? { rating: "Moderate", comment: text } : null;
+    const audit: LeaderDraft["audit_status"] = has(/not (an? )?audit|no audit|we don.?t audit/)
+      ? { status: "not_audit_client", audit_lead: null, comment: "" }
+      : has(/related entity|affiliate/) && has(/audit/) ? { status: "related_entity_audit_client", audit_lead: null, comment: "" }
+      : has(/we audit|audit client|our audit/) ? { status: "audit_client", audit_lead: null, comment: "" }
+      : has(/not sure.*audit|unsure.*audit|audit.*(unsure|not sure)/) ? { status: "unsure", audit_lead: null, comment: "" } : null;
+    const weak = has(/barely|doesn.?t know|don.?t know us|no relationship|weak relationship/);
+    const exec: LeaderDraft["exec_relationship"] = weak
+      ? { seniority: has(/ceo/) ? "Director" : "None", quality: "Weak", receptiveness: "Unknown", owner: null, comment: text }
+      : has(/ceo|cfo|coo|cio|cto|c-suite|board/) && has(/strong|close|knows? us well|trust/)
+        ? { seniority: has(/ceo/) ? "CEO" : "C-suite", quality: "Strong", receptiveness: has(/open|receptive|keen/) ? "Yes" : "Maybe", owner: null, comment: text }
+        : null;
+    return { brand_permission: brand, audit_status: audit, exec_relationship: exec, inferred_fields: [brand && "brand_permission", exec && "exec_relationship"].filter(Boolean) as string[] };
+  }
+
+  async proposeApproach(): Promise<string | null> {
+    return `${MOCK_NOTICE} Suggested: open with a sector-insight conversation through the relationship owner, and test appetite with a different sponsor before pitching a full transformation.`;
   }
 }

@@ -46,6 +46,8 @@ export const DimensionScore = z.object({
   rationale: z.string(),
   confidence: Confidence,
   origin: z.enum(["AI-estimated", "Leader-informed", "Human override"]),
+  /** The AI's own estimate, kept when a leader's input replaces it. */
+  ai_score: z.number().int().optional(),
   evidence_ids: z.array(z.string()),
 });
 export type DimensionScore = z.infer<typeof DimensionScore>;
@@ -130,6 +132,7 @@ export const Qualification = z.object({
   entry_point: EntryPoint,
   open_questions: z.array(z.string()),
   gate: Gate,
+  leader_summary: z.any().nullable().optional(), // LeaderSummary, see leaders.ts
   sector_research: z.object({ sector: z.string(), refreshed_at: z.string() }).nullable().optional(),
   override: z
     .object({ tier: Tier.optional(), reason: z.string(), by: z.string(), at: z.string() })
@@ -163,3 +166,20 @@ export const SECTOR_OPTIONS = [
   "Transport & Logistics",
   "Other",
 ] as const;
+
+export const AUDIT_LABELS: Record<AuditStatus, string> = {
+  not_audit_client: "Not an audit client",
+  audit_client: "Audit client",
+  related_entity_audit_client: "Related entity is an audit client",
+  unsure: "Unsure",
+};
+
+/** Demo identities (no login yet). The role is sent by the web app and enforced server-side for gate changes. */
+export const DEMO_USERS: { id: string; name: string; role: Role; title: string }[] = [
+  { id: "casey", name: "Casey Consultant", role: "consultant", title: "Consultant" },
+  { id: "priya", name: "Priya Partner", role: "account_leader", title: "Relationship partner" },
+  { id: "sam", name: "Sam Sector", role: "account_leader", title: "Sector leader" },
+  { id: "alex", name: "Alex Audit", role: "account_leader", title: "Audit partner" },
+  { id: "riley", name: "Riley Risk", role: "risk_independence", title: "Risk / Independence" },
+  { id: "lee", name: "Lee Leadership", role: "leadership", title: "Leadership (read-only)" },
+];

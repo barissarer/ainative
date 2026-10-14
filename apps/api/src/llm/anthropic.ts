@@ -14,11 +14,11 @@ import {
   type Qualification,
   type SectorResearch,
 } from "@ainative/shared";
-import type { Attachment, LlmEvent, LlmProvider, ProgressEvent, QualifyRequest, SectorStore } from "./types";
-import { IntakeSchema, ReasoningSchema, RefineSchema, SectorSummarySchema, type Intake } from "./schemas";
+import type { Attachment, LeaderDraft, LlmEvent, LlmProvider, ProgressEvent, QualifyRequest, SectorStore } from "./types";
+import { IntakeSchema, LeaderMapSchema, ReasoningSchema, RefineSchema, SectorSummarySchema, type Intake } from "./schemas";
 import { extractSources, formatSources, textOf, type Source } from "./sources";
 import { assemble } from "./assemble";
-import { loadMethodology } from "../config";
+import { loadGateRules, loadMethodology } from "../config";
 
 const SECTOR_TTL_MS = 30 * 24 * 3600 * 1000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -233,7 +233,33 @@ export class AnthropicProvider implements LlmProvider {
       type: "result",
       client,
       reply: r.reply,
-      qualification: { ...prev, dimensions: dims, evidence, weights, overall_score: score, ai_tier, tier: prev.override?.tier ?? applyGate(ai_tier, prev.gate), confidence: overallConfidence(dims), created_by: req.user },
+      qualification: { ...prev, dimensions: dims, evidence, weights, overall_score: score, ai_tier, tier: prev.override?.tier ?? applyGate(ai_tier, prev.gate, loadGateRules()), confidence: overallConfidence(dims), created_by: req.user },
     };
+  }
+
+  async mapLeaderText(text: string, context: string): Promise<LeaderDraft> {
+    const m = loadMethodology();
+    return this.structured(
+      LeaderMapSchema,
+      `${m.prompts.leader_mapping}\nRules: set a lens to null if the text does not mention it - never guess an audit status. Quote or closely paraphrase the leader in each comment. List in inferred_fields any lens value you inferred rather than read directly. You have no ability to change or clear the audit gate; you only draft values for the leader to confirm.`,
+      `Leader's words:\n${text}\n\nContext about the client (for interpretation only):\n${context}`,
+      "low",
+    );
+  }
+
+  async proposeApproach(context: string): Promise<string | null> {
+    try {
+      const res = await this.client.messages.create({
+        model: this.model,
+        max_tokens: 1000,
+        system: "You advise consultants on how to approach a client. When leader input conflicts with the AI's first-pass view, propose a revised approach in 2-3 plain sentences: a softer entry point or a different sponsor. Do not make independence or audit determinations.",
+        messages: [{ role: "user", content: context }],
+        output_config: { effort: "low" },
+      });
+      if (res.stop_reason === "refusal") return null;
+      return textOf(res.content) || null;
+    } catch {
+      return null; // the revised approach is optional; never block saving leader input
+    }
   }
 }

@@ -3,20 +3,21 @@ import cors from "@fastify/cors";
 import type { Qualification, Client } from "@ainative/shared";
 import { audit, type Db } from "./db";
 import type { LlmProvider, Attachment, SectorStore } from "./llm/types";
-import { loadIndependence, loadMethodology } from "./config";
+import { loadGateRules, loadIndependence, loadMethodology, leaderAggregation } from "./config";
+import { registerLeaderRoutes, applyAllLeaderInputs, redactForRole, actorOf } from "./routes";
 
-const id = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
+export const id = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
 
 function rowToQual(r: any): Qualification {
   return { ...r.data, id: r.id, client_id: r.client_id, version: r.version, created_at: new Date(r.created_at).toISOString() };
 }
 
-async function latest(db: Db, clientId: string): Promise<Qualification | undefined> {
+export async function latest(db: Db, clientId: string): Promise<Qualification | undefined> {
   const r = await db.query("select * from qualifications where client_id=$1 order by version desc limit 1", [clientId]);
   return r.rows[0] ? rowToQual(r.rows[0]) : undefined;
 }
 
-async function save(db: Db, client: Client, q: Omit<Qualification, "id" | "version" | "created_at">, reason: string) {
+export async function save(db: Db, client: Client, q: Omit<Qualification, "id" | "version" | "created_at">, reason: string) {
   await db.query(
     `insert into clients (id,name,sector,sub_sector,region,size,owner,relationship_notes) values ($1,$2,$3,$4,$5,$6,$7,$8)
      on conflict (id) do update set name=excluded.name, sector=excluded.sector, region=coalesce(excluded.region, clients.region)`,
@@ -67,23 +68,33 @@ export async function buildApp(db: Db, llm: LlmProvider) {
 
   app.get("/api/clients", async () => {
     const r = await db.query(
-      `select c.*, q.id as qid, q.version, q.overall_score, q.tier, q.confidence, q.created_at as updated_at, q.data->'gate'->>'status' as gate_status
+      `select c.*, q.version, q.overall_score, q.tier, q.confidence, q.created_at as updated_at, q.data,
+              (select count(*) from leader_requests lr where lr.client_id=c.id and lr.status='pending') as pending
        from clients c join lateral (select * from qualifications where client_id=c.id order by version desc limit 1) q on true
        order by q.created_at desc`,
     );
-    return r.rows.map((x: any) => ({
-      id: x.id, name: x.name, sector: x.sector, region: x.region, owner: x.owner,
-      score: Number(x.overall_score), tier: x.tier, confidence: x.confidence,
-      version: x.version, updated_at: new Date(x.updated_at).toISOString(), gate_status: x.gate_status,
-      statuses: [x.gate_status === "restricted" ? "Audit restriction" : null, x.gate_status === "unresolved" ? "Audit status unresolved" : null].filter(Boolean),
-    }));
+    return r.rows.map((x: any) => {
+      const gate = x.data?.gate?.status;
+      const informed = (x.data?.dimensions ?? []).some((d: any) => d.origin === "Leader-informed");
+      return {
+        id: x.id, name: x.name, sector: x.sector, region: x.region, owner: x.owner,
+        score: Number(x.overall_score), tier: x.tier, confidence: x.confidence,
+        version: x.version, updated_at: new Date(x.updated_at).toISOString(), gate_status: gate,
+        statuses: [
+          Number(x.pending) > 0 ? "Awaiting leader input" : null,
+          informed ? "Leader-informed" : null,
+          gate === "restricted" ? "Audit restriction" : null,
+          gate === "unresolved" ? "Audit status unresolved" : null,
+        ].filter(Boolean),
+      };
+    });
   });
 
   app.get<{ Params: { id: string } }>("/api/clients/:id", async (req, reply) => {
     const c = await db.query("select * from clients where id=$1", [req.params.id]);
     if (!c.rows[0]) return reply.code(404).send({ error: "not found" });
     const q = await latest(db, req.params.id);
-    return { client: c.rows[0], qualification: q };
+    return { client: c.rows[0], qualification: q && redactForRole(q, actorOf(req).role) };
   });
 
   app.get<{ Params: { id: string } }>("/api/clients/:id/versions", async (req) => {
@@ -116,8 +127,12 @@ export async function buildApp(db: Db, llm: LlmProvider) {
       }
       for await (const ev of llm.qualify({ message, previous, previousClient, user, attachments, forceSectorRefresh: refresh_sector })) {
         if (ev.type === "result") {
-          const saved = await save(db, ev.client, ev.qualification, previous ? `Refined: ${message}` : "Initial qualification");
-          send("result", { client: ev.client, qualification: saved, reply: ev.reply });
+          // The AI never writes the audit gate, and a re-run must not discard leaders' input.
+          let qual = ev.qualification;
+          if (previous) qual = { ...qual, gate: previous.gate };
+          qual = await applyAllLeaderInputs(db, ev.client.id, qual);
+          const saved = await save(db, ev.client, qual, previous ? `Refined: ${message}` : "Initial qualification");
+          send("result", { client: ev.client, qualification: redactForRole(saved, actorOf(req).role), reply: ev.reply });
         } else send(ev.type, ev);
       }
     } catch (e: any) {
@@ -128,5 +143,6 @@ export async function buildApp(db: Db, llm: LlmProvider) {
     return reply;
   });
 
+  registerLeaderRoutes(app, db, llm);
   return app;
 }

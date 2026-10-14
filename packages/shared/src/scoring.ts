@@ -72,7 +72,8 @@ export function applyGate(tier: Tier, gate: Pick<Gate, "status">, rules: GateRul
   if (gate.status === "restricted") cap = rules.restricted_cap;
   else if (gate.status === "unresolved") cap = rules.unresolved_cap;
   if (!cap) return tier;
-  return TIER_RANK[tier] > TIER_RANK[cap] ? cap : tier;
+  // At or above the cap becomes the cap, so a plain "Nurture" is relabelled "Nurture (advisory-only)" when restricted.
+  return tier !== "Deprioritize" && TIER_RANK[tier] >= TIER_RANK[cap] ? cap : tier;
 }
 
 /** Overall confidence: the weakest link, softened if most dimensions are High. */

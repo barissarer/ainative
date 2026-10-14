@@ -2,10 +2,11 @@ import { useState } from "react";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { DIMENSION_LABELS, type Client, type Qualification } from "@ainative/shared";
 import { TierBadge } from "./Bits";
+import LeaderPanel from "./LeaderPanel";
 
 const tag = (t: string) => (t === "Fact" ? "bg-brand/20" : t === "Leader-informed" ? "bg-black text-white" : "bg-neutral-100");
 
-export default function Scorecard({ client, q, gateBanner, gateNote, onRefreshSector, busy }: { client: Client; q: Qualification; gateBanner?: string; gateNote?: string; onRefreshSector?: () => void; busy?: boolean }) {
+export default function Scorecard({ client, q, gateBanner, gateNote, onRefreshSector, busy, role, onUpdate }: { client: Client; q: Qualification; gateBanner?: string; gateNote?: string; onRefreshSector?: () => void; busy?: boolean; role?: string; onUpdate?: (q: Qualification) => void }) {
   const [open, setOpen] = useState<string | null>(null);
   const radar = q.dimensions.map((d) => ({ dim: DIMENSION_LABELS[d.key].split(" ")[0], score: d.score }));
   const evById = new Map(q.evidence.map((e) => [e.id, e]));
@@ -14,10 +15,14 @@ export default function Scorecard({ client, q, gateBanner, gateNote, onRefreshSe
   return (
     <div className="space-y-4 p-5">
       {gateActive && (
-        <div className="rounded-lg border-2 border-black bg-white p-3 text-sm">
+        <div className="rounded-lg border-2 border-black bg-white p-3 text-sm" role="alert">
           <span className="font-semibold">{q.gate.status === "restricted" ? gateBanner : "Audit relationship not confirmed: “Pursue now” is blocked until resolved."}</span>{" "}
           <span className="text-neutral-600">{gateNote}</span>
+          {q.gate.reason && <div className="mt-1 text-xs text-neutral-500">{q.gate.reason}</div>}
         </div>
+      )}
+      {q.gate.status === "cleared" && (
+        <div className="rounded-lg border border-neutral-300 bg-white p-3 text-xs text-neutral-600">Audit gate cleared by {q.gate.cleared_by} on {new Date(q.gate.updated_at).toLocaleDateString()}: {q.gate.reason}</div>
       )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -95,11 +100,7 @@ export default function Scorecard({ client, q, gateBanner, gateNote, onRefreshSe
               <button className="btn mt-2" disabled={busy || !onRefreshSector} onClick={onRefreshSector}>Refresh sector research</button>
             </div>
           )}
-          <div className="card p-3 text-sm">
-            <h3 className="mb-1 font-semibold">Account leader input</h3>
-            <p className="text-neutral-600">No leader input yet. Brand permission and executive relationship are AI estimates.</p>
-            <button className="btn mt-2" disabled title="Coming in Phase 3">Ask account leader</button>
-          </div>
+          <LeaderPanel client={client} q={q} role={role ?? "consultant"} onUpdate={onUpdate ?? (() => {})} />
           <div className="flex flex-wrap gap-2">
             {["Save to campaign", "Compare", "Export PDF", "Hand off to Narrative builder"].map((a) => (
               <button key={a} className="btn" disabled title="Coming in a later phase">{a}</button>

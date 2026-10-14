@@ -64,3 +64,20 @@ export const SectorSummarySchema = z.object({
   summary: z.string(),
   ai_impact_view: z.string(),
 });
+
+export const LeaderMapSchema = z.object({
+  brand_permission: z.object({ rating: z.enum(["Strong", "Moderate", "Weak", "Unknown"]), comment: z.string() }).nullable(),
+  audit_status: z
+    .object({ status: z.enum(["not_audit_client", "audit_client", "related_entity_audit_client", "unsure"]), audit_lead: z.string().nullable(), comment: z.string() })
+    .nullable(),
+  exec_relationship: z
+    .object({
+      seniority: z.enum(["CEO", "C-suite", "VP", "Director", "None"]),
+      quality: z.enum(["Strong", "Moderate", "Weak"]),
+      receptiveness: z.enum(["Yes", "Maybe", "No", "Unknown"]),
+      owner: z.string().nullable(),
+      comment: z.string(),
+    })
+    .nullable(),
+  inferred_fields: z.array(z.string()),
+});

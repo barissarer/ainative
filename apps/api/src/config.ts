@@ -24,3 +24,17 @@ export function loadMethodology() {
 export function loadIndependence() {
   return load("independence.yaml");
 }
+
+import { DEFAULT_GATE_RULES, type GateRules, type Tier } from "@ainative/shared";
+
+/** Audit gate tier caps, from config/independence.yaml (admin-editable, not hard-coded). */
+export function loadGateRules(): GateRules {
+  const r = loadIndependence().audit_status_rules ?? {};
+  return {
+    restricted_cap: (r.audit_client?.tier_cap as Tier) ?? DEFAULT_GATE_RULES.restricted_cap,
+    unresolved_cap: (r.unsure?.tier_cap as Tier) ?? DEFAULT_GATE_RULES.unresolved_cap,
+  };
+}
+export function leaderAggregation(): "conservative" | "median" {
+  return (load("methodology.yaml").leader_aggregation as any) === "median" ? "median" : "conservative";
+}

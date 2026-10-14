@@ -23,3 +23,7 @@ prompts:
   reasoning: "Score each dimension 1-5 using the rubric. Give a one-to-two sentence rationale, a confidence level, and cite evidence ids. Lower confidence when evidence is weak."
   refine: "Apply the user's instruction to the existing qualification (weights, assumptions). Return the full updated structured result."
   leader_mapping: "Map the leader's free text onto the three lenses. Return structured values and flag anything you inferred. Never touch the audit gate."
+# How several leaders' views combine into one score for brand permission / executive relationship.
+# Every individual view is always shown; disagreement is never hidden.
+#   conservative = use the lowest score; median = use the middle score
+leader_aggregation: conservative

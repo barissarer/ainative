@@ -21,7 +21,7 @@ function summarise(q: Qualification) {
   return { top, low };
 }
 
-export default function Home() {
+export default function Home({ role = "consultant" }: { role?: string }) {
   const [params] = useSearchParams();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -141,7 +141,7 @@ export default function Home() {
       </section>
 
       <section className="min-h-0 overflow-y-auto bg-neutral-50/50">
-        {client && q ? <Scorecard client={client} q={q} gateBanner={cfg?.gate_banner} gateNote={cfg?.gate_note} busy={busy} onRefreshSector={() => send("Re-run with refreshed sector research", { refreshSector: true })} /> : (
+        {client && q ? <Scorecard client={client} q={q} gateBanner={cfg?.gate_banner} gateNote={cfg?.gate_note} busy={busy} role={role} onUpdate={setQ} onRefreshSector={() => send("Re-run with refreshed sector research", { refreshSector: true })} /> : (
           <div className="flex h-full items-center justify-center p-10 text-center text-sm text-neutral-500">Your scorecard will appear here.</div>
         )}
       </section>

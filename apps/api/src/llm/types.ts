@@ -33,8 +33,27 @@ export interface SectorStore {
   save(r: SectorResearch): Promise<void>;
 }
 
-/** Provider-agnostic interface. */
+/** A leader's free text mapped onto the three lenses. A null lens means the text did not mention it. */
+export interface LeaderDraft {
+  brand_permission: { rating: "Strong" | "Moderate" | "Weak" | "Unknown"; comment: string } | null;
+  audit_status: { status: "not_audit_client" | "audit_client" | "related_entity_audit_client" | "unsure"; audit_lead: string | null; comment: string } | null;
+  exec_relationship: {
+    seniority: "CEO" | "C-suite" | "VP" | "Director" | "None";
+    quality: "Strong" | "Moderate" | "Weak";
+    receptiveness: "Yes" | "Maybe" | "No" | "Unknown";
+    owner: string | null;
+    comment: string;
+  } | null;
+  /** Fields the model inferred rather than read directly; shown to the leader for confirmation. */
+  inferred_fields: string[];
+}
+
+/** Provider-agnostic interface. Neither leader method can touch the audit gate. */
 export interface LlmProvider {
   name: string;
   qualify(req: QualifyRequest): AsyncGenerator<LlmEvent>;
+  /** Map free text (typed or dictated) onto the three leader lenses. Output is a draft for the leader to confirm. */
+  mapLeaderText(text: string, context: string): Promise<LeaderDraft>;
+  /** Suggest a softer entry point or different sponsor when leader input conflicts with the AI view. */
+  proposeApproach(context: string): Promise<string | null>;
 }
